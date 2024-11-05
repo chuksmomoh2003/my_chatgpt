@@ -6,9 +6,12 @@
 
 import streamlit as st
 import pandas as pd
-import openai
+import openai  # Make sure this is imported
 import ast  # To check code safety and syntax
 import re   # To extract and clean code blocks from the response
+import matplotlib.pyplot as plt  # For plotting
+import seaborn as sns  # For heatmap plotting
+import plotly.express as px  # For interactive plotting
 
 # Setting up Streamlit's UI
 st.title("AI Data Assistant App")
@@ -25,18 +28,10 @@ def generate_code_for_query(df, question):
     prompt = (
         f"{columns_info}\nQuestion: {question}\n"
         "Generate Python code using pandas to answer this question. Use the DataFrame named 'df' directly. "
-        "Do not import libraries or read external files. Store the result in a variable named 'result'."
+        "Do not import libraries or read external files. Store the result in a variable named 'result'. "
+        "If a plot is needed, ensure it is displayed using Streamlit (st.pyplot() or st.plotly_chart())."
     )
     
-    response = openai.ChatCompletion.create(
-        model="gpt-4-turbo",  # Replace with your chosen model
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response['choices'][0]['message']['content']
-
-# Function to handle general questions not related to data analysis
-def handle_general_question(question):
-    prompt = f"Question: {question}\nAnswer this question as best as you can."
     response = openai.ChatCompletion.create(
         model="gpt-4-turbo",  # Replace with your chosen model
         messages=[{"role": "user", "content": prompt}]
@@ -45,38 +40,41 @@ def handle_general_question(question):
 
 # Function to clean and prepare code for execution
 def clean_code(code):
-    # Remove import statements and references to 'pd.'
     cleaned_code = re.sub(r'import\s+pandas\s+as\s+pd', '', code)
     cleaned_code = re.sub(r'pd\.', '', cleaned_code)
     cleaned_code = re.sub(r'#.*', '', cleaned_code)
-    
-    # Replace 'to_datetime' with direct pandas call via df (assume 'df' is available)
     cleaned_code = cleaned_code.replace('to_datetime', 'pd.to_datetime')
+    cleaned_code = cleaned_code.replace('plt.show()', 'st.pyplot(fig)')
+    
+    # Replace any standalone 'to_numeric' with 'pd.to_numeric'
+    cleaned_code = cleaned_code.replace('to_numeric', 'pd.to_numeric')
     
     return cleaned_code.strip()
 
 # Function to extract code from the response
 def extract_code_from_response(response):
-    # Extract the code block between triple backticks
     code_match = re.search(r'```python(.*?)```', response, re.DOTALL)
     if code_match:
         return clean_code(code_match.group(1).strip())
     else:
-        # Return the response directly if no code block is found, to attempt execution
         return clean_code(response.strip())
 
-# Function to safely execute generated code
+# Updated execute_code function
 def execute_code(code, df):
-    local_vars = {'df': df, 'pd': pd}  # Ensure 'pd' is in the local scope
+    local_vars = {'df': df, 'pd': pd, 'plt': plt, 'sns': sns, 'px': px, 'st': st}  # Ensure 'pd' is included
     try:
-        # Check code for valid syntax before execution
         parsed_code = ast.parse(code)
-        
-        # Execute the code only if syntax is valid
         exec(code, {}, local_vars)
         if 'result' in local_vars:
             return local_vars['result']
         else:
+            # Check if a plot was generated using Matplotlib
+            if plt.get_fignums():
+                fig, ax = plt.subplots()  # Create a figure and axes
+                fig = plt.gcf()  # Get the current figure
+                st.pyplot(fig)  # Pass the figure to st.pyplot()
+                plt.clf()  # Clear the figure after displaying
+                return "Plot displayed successfully."
             return "Code executed successfully, but no 'result' variable was found."
     except SyntaxError as se:
         return f"Syntax error in generated code: {se}"
@@ -110,10 +108,8 @@ if uploaded_file:
                 st.write("Generated Code:")
                 st.code(code_snippet)
                 
-                # Extract only the code portion if necessary
                 code_to_execute = extract_code_from_response(code_snippet)
                 
-                # Check the code snippet for basic formatting issues
                 answer = execute_code(code_to_execute, df)
                 st.session_state['history'].append({'question': question, 'answer': answer})
                 
