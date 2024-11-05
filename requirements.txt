@@ -1,0 +1,5 @@
+streamlit == 1.39.0 
+openai == 0.28.0
+pandas == 2.2.3
+ast
+re
