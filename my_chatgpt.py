@@ -38,6 +38,17 @@ def generate_code_for_query(df, question):
     )
     return response['choices'][0]['message']['content']
 
+# Function to handle general questions using OpenAI
+def handle_general_question(question):
+    prompt = f"Answer the following question in a detailed yet concise way:\n\n{question}"
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-4-turbo",  # Replace with your model
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    return response['choices'][0]['message']['content']
+
 # Function to clean and prepare code for execution
 def clean_code(code):
     cleaned_code = re.sub(r'import\s+pandas\s+as\s+pd', '', code)
